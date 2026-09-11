@@ -1,8 +1,7 @@
 " ============================================================================
 " .vimrc — Vim 9
 " Same settings, keymaps, and non-LSP plugins as your original config.
-" LSP/completion: vim-lsp + asyncomplete.vim + vim-lsp-settings (was coc.nvim)
-" No Node.js dependency — talks directly to clangd / pyright etc.
+" LSP/completion: coc.nvim (replaces the vim-lsp/asyncomplete stack)
 " ============================================================================
 
 " ----------------------------------------------------------------------------
@@ -16,7 +15,9 @@
 :set smarttab
 :set softtabstop=4
 :set mouse=a
+set clipboard=unnamedplus
 
+filetype off
 call plug#begin()
 
 " === Kept exactly as original (non-LSP plugins) ===
@@ -32,7 +33,7 @@ Plug 'https://github.com/ryanoasis/vim-devicons' " Developer Icons
 Plug 'https://github.com/tc50cal/vim-terminal' " Vim Terminal
 Plug 'https://github.com/preservim/tagbar' " Tagbar for code navigation
 Plug 'https://github.com/terryma/vim-multiple-cursors' " CTRL + N for multiple cursors
-Plug 'https://github.com/sheerun/vim-polyglot' " CTRL + N for multiple cursors
+Plug 'https://github.com/sheerun/vim-polyglot'
 " Plug 'https://github.com/conornewton/vim-latex-preview' " Vim Latex Plugin
 Plug 'https://github.com/lervag/vimtex' " Vim Latex Plugin
 Plug 'https://github.com/drewtempelmeyer/palenight.vim' " Palenight
@@ -47,31 +48,20 @@ Plug 'https://github.com/navarasu/onedark.nvim'
 Plug 'https://github.com/RRethy/nvim-base16'
 Plug 'https://github.com/simnalamburt/vim-mundo'
 
-" === Replaces coc.nvim: vim-lsp stack (no Node.js) ===
-Plug 'prabirshrestha/vim-lsp'                 " Core LSP client
-Plug 'mattn/vim-lsp-settings'                 " Auto-installs & configures servers (clangd, pyright, etc.)
-Plug 'prabirshrestha/asyncomplete.vim'        " Completion engine (replaces coc's completion)
-Plug 'prabirshrestha/asyncomplete-lsp.vim'    " Bridges asyncomplete <-> vim-lsp
+" === coc.nvim — replaces vim-lsp + asyncomplete + vim-lsp-settings ===
+Plug 'neoclide/coc.nvim', {'branch': 'release'}
 
 let g:dashboard_default_executive ='fzf'
 set encoding=UTF-8
 call plug#end()
 
-if executable('clangd')
-    au User lsp_setup call lsp#register_server({
-        \ 'name': 'clangd',
-        \ 'cmd': {server_info->['clangd']},
-        \ 'allowlist': ['c', 'cpp', 'objc', 'objcpp'],
-        \ })
-endif
-
 " ----------------------------------------------------------------------------
-" Keymaps — SAME as original, only <C-l> now uses vim-lsp instead of CoC
+" Keymaps — SAME as original, <C-l> now maps to coc's go-to-definition
 " ----------------------------------------------------------------------------
 nnoremap <C-f> :NERDTreeFocus<CR>
 nnoremap <C-n> :NERDTree<CR>
 nnoremap <C-t> :NERDTreeToggle<CR>
-nnoremap <C-l> :LspDefinition<CR>
+nnoremap <C-l> <Plug>(coc-definition)
 nmap <F8> :TagbarToggle<CR>
 
 :set completeopt-=preview " For No Previews
@@ -79,13 +69,52 @@ nmap <F8> :TagbarToggle<CR>
 let g:NERDTreeDirArrowExpandable="+"
 let g:NERDTreeDirArrowCollapsible="~"
 
+" ----------------------------------------------------------------------------
+" coc.nvim core settings and keybindings (standard recommended config)
+" ----------------------------------------------------------------------------
+set completeopt=menuone,noinsert,noselect
+set updatetime=300
+set shortmess+=c
+set signcolumn=yes
+
+" Tab to trigger/navigate completion, Enter to confirm
+inoremap <silent><expr> <TAB>
+      \ coc#pum#visible() ? coc#pum#next(1) :
+      \ CheckBackspace() ? "\<Tab>" :
+      \ coc#refresh()
+inoremap <expr><S-TAB> coc#pum#visible() ? coc#pum#prev(1) : "\<C-h>"
+inoremap <silent><expr> <CR> coc#pum#visible() ? coc#pum#confirm() : "\<C-g>u\<CR>"
+
+function! CheckBackspace() abort
+  let col = col('.') - 1
+  return !col || getline('.')[col - 1]  =~# '\s'
+endfunction
+
+" Manually trigger completion
+inoremap <silent><expr> <c-space> coc#refresh()
+
+" Hover documentation with K
+nnoremap <silent> K :call ShowDocumentation()<CR>
+function! ShowDocumentation()
+  if CocAction('hasProvider', 'hover')
+    call CocActionAsync('doHover')
+  else
+    call feedkeys('K', 'in')
+  endif
+endfunction
+
+" Go to references
+nmap <silent> gr <Plug>(coc-references)
+nmap <silent> gd <Plug>(coc-definition)
+
 " --- Just Some Notes ----
 " :PlugClean :PlugInstall :PlugUpdate
 "
-" vim-lsp-settings auto-installs servers on first use of a filetype, or run:
-" :LspInstallServer         -- install server for current filetype
-" :LspManageServers         -- list/manage installed servers
-" Servers you'll want: clangd (C/C++), pyright (Python)
+" First time setup for C/C++:
+"   :CocInstall coc-clangd
+" Check status:
+"   :CocInfo
+"   :CocList services       -- list running language servers
 
 " air-line
 let g:airline_powerline_fonts = 1
@@ -106,22 +135,6 @@ let g:airline_right_alt_sep = '❰'
 let g:airline_symbols.branch = '⎇'
 let g:airline_symbols.readonly = '🔒'
 let g:airline_symbols.linenr = 'lₙ'
-
-" ----------------------------------------------------------------------------
-" Completion mapping — replaces the CoC <Tab> mapping
-" asyncomplete.vim shows its popup menu automatically as you type;
-" this just makes <Tab> select the next entry when the menu is visible.
-" ----------------------------------------------------------------------------
-inoremap <expr> <Tab> pumvisible() ? "\<C-n>" : "\<Tab>"
-inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
-inoremap <expr> <CR> pumvisible() ? asyncomplete#close_popup() : "\<CR>"
-
-" ----------------------------------------------------------------------------
-" vim-lsp core settings
-" ----------------------------------------------------------------------------
-let g:lsp_diagnostics_enabled = 1
-let g:lsp_diagnostics_virtual_text_enabled = 1
-let g:lsp_document_code_action_signs_enabled = 1
 
 au BufRead,BufNewFile *.asm set filetype=nasm
 
